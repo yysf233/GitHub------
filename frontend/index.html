@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub日志可视化</title>
+    <!-- Ace Editor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/mode-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/theme-github.min.js"></script>
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f6f8fa;
+            color: #24292f;
+        }
+
+        .header-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #d0d7de;
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 6px;
+            color: #57606a;
+        }
+
+        .tab-btn.active {
+            background: #0969da;
+            color: white;
+        }
+
+        .admin-section {
+            display: none;
+        }
+
+        .admin-section.active {
+            display: block;
+        }
+
+        /* Layout */
+        .task-layout {
+            display: flex;
+            gap: 20px;
+            height: 80vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: white;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .main-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .editor-container {
+            flex: 1;
+            background: white;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .log-container {
+            height: 25%;
+            background: #2d333b;
+            border-radius: 6px;
+            padding: 10px;
+            color: #adbac7;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        /* Sidebar Items */
+        .task-list {
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .task-item {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .task-item:hover {
+            background: #f6f8fa;
+        }
+
+        .task-item.selected {
+            background: #e6f6ff;
+            border-left: 3px solid #0969da;
+        }
+
+        .task-name {
+            font-weight: 500;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        /* Controls */
+        .controls {
+            padding: 10px;
+            background: #f6f8fa;
+            border-bottom: 1px solid #d0d7de;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 32px;
+            height: 18px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: #2da44e;
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(14px);
+        }
+
+        #code-editor {
+            width: 100%;
+            flex: 1;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #d0d7de;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: #f3f4f6;
+        }
+
+        .btn-primary {
+            background: #2da44e;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: #2c974b;
+        }
+
+        .btn-run {
+            background: #0969da;
+            color: white;
+            border: none;
+        }
+
+        .btn-run:hover {
+            background: #0550ae;
+        }
+
+        #top-auth {
+            font-size: 12px;
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        #auth-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ccc;
+            display: inline-block;
+        }
+
+        .auth-ok #auth-status {
+            background: #2da44e;
+        }
+
+        /* Toast Notification */
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 16px;
+            position: fixed;
+            z-index: 99;
+            right: 30px;
+            top: 30px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s, top 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+            top: 30px;
+        }
+
+        #toast.success {
+            background-color: #2da44e;
+        }
+
+        #toast.error {
+            background-color: #cf222e;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-title">
+        <h2 style="margin:0;">🤖 GitHub日志可视化</h2>
+        <div id="top-auth">
+            <span id="run-status-text" style="margin-right:15px; font-weight:bold; font-size:14px;"></span>
+            <button class="btn" style="margin-right:10px; color:#cf222e; border-color:#d0d7de;"
+                onclick="runAllTasks()">⚡ 运行所有任务</button>
+            <span id="auth-status"></span>
+            <input type="password" id="gh-token" placeholder="GitHub Token"
+                style="padding:4px; border:1px solid #ccc; border-radius:4px; width: 100px;">
+            <button class="btn" onclick="saveToken()">保存</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('manage')">⚙️ 任务管理</button>
+        <button class="tab-btn" onclick="switchTab('logs')">📋 运行历史</button>
+    </div>
+
+    <!-- Task Management Tab -->
+    <div id="manage-section" class="admin-section active">
+        <div class="task-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div style="padding:10px; border-bottom:1px solid #eee; font-weight:bold; background:#f6f8fa;">任务列表
+                </div>
+                <div id="task-list-container" class="task-list">
+                    <!-- Tasks injected here -->
+                </div>
+                <div style="padding:10px; border-top:1px solid #eee; background:#f6f8fa;">
+                    <button class="btn btn-primary" style="width:100%" onclick="addNewTask()">+ 新建 Python 脚本</button>
+                </div>
+            </div>
+
+            <!-- Main Pane -->
+            <div class="main-pane">
+                <!-- Editor Area -->
+                <div class="editor-container">
+                    <div class="controls">
+                        <input type="text" id="task-name-input" placeholder="任务名称"
+                            style="border:1px solid #ccc; padding:4px; border-radius:4px; font-weight:bold;">
+
+                        <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <label
+                                    style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
+                                    <input type="checkbox" id="check-schedule"
+                                        onchange="document.getElementById('schedule-time').style.display = this.checked ? 'block' : 'none'">
+                                    定时运行
+                                </label>
+                                <input type="time" id="schedule-time" title="设置每天运行时间（留空则每5分钟运行）"
+                                    style="border:1px solid #ccc; border-radius:4px; padding:0 4px; display:none;">
+                            </div>
+                            <label style="display:flex; align-items:center; gap:5px; font-size:13px; cursor:pointer;">
+                                <input type="checkbox" id="check-manual"> 手动触发
+                            </label>
+                            <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
+                            <input type="text" id="pip-deps" placeholder="📦 PIP包 (如: requests, pandas)"
+                                title="运行时自动安装的PIP包，逗号分隔"
+                                style="border:1px solid #ddd; padding:4px 8px; border-radius:4px; font-size:12px; width:180px;">
+                            <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div>
+                            <button class="btn" style="color:#cf222e; border-color:#d0d7de;" onclick="deleteTask()">🗑️
+                                删除</button>
+                            <button class="btn btn-primary" id="btn-save-current" onclick="saveCurrentTask()">💾
+                                保存配置</button>
+                            <button class="btn btn-run" onclick="runCurrentTask()">▶️ 运行任务</button>
+                        </div>
+                    </div>
+                    <!-- Ace Editor Div -->
+                    <div id="code-editor"></div>
+                </div>
+
+                <!-- Output Area -->
+                <div class="log-container" id="task-output">
+                    <div style="color:#666;">点击左侧任务查看最近日志...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs History Tab -->
+    <div id="logs-section" class="admin-section" style="padding: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <input type="text" id="log-search" placeholder="🔍 搜索日志..." oninput="filterLogs()"
+                    style="padding:8px; border:1px solid #ddd; border-radius:4px; width:200px;">
+                <select id="log-filter-status" onchange="filterLogs()"
+                    style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+                    <option value="all">全部状态</option>
+                    <option value="success">✅ 成功</option>
+                    <option value="failure">❌ 失败</option>
+                </select>
+            </div>
+            <button class="btn" onclick="loadHistory()">🔄 刷新列表</button>
+        </div>
+        <div id="history-container"></div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast">Message</div>
+
+    <script>
+        const REPO = 'luoluoluo22/github-log-visualization';
+        let allWorkflows = [];
+        let selectedIndex = -1;
+        let lastLogs = "";
+        let editor;
+
+        // Init Ace Editor
+        window.onload = function () {
+            editor = ace.edit("code-editor");
+            editor.setTheme("ace/theme/github");
+            editor.session.setMode("ace/mode/python");
+            editor.setFontSize(14);
+            editor.setShowPrintMargin(false);
+
+            // Init Token
+            const savedToken = localStorage.getItem('gh_token');
+            if (savedToken) {
+                document.getElementById('gh-token').value = savedToken;
+                document.querySelector('.header-title').classList.add('auth-ok');
+                loadData();
+            }
+        };
+
+        function showToast(msg, type = 'success') {
+            const el = document.getElementById("toast");
+            el.className = "show " + type;
+            el.innerText = msg;
+            setTimeout(() => { el.className = el.className.replace("show", ""); }, 3000);
+        }
+
+        function saveToken() {
+            localStorage.setItem('gh_token', document.getElementById('gh-token').value);
+            location.reload();
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tab + '-section').classList.add('active');
+            if (tab === 'logs') loadHistory();
+        }
+
+        async function loadData() {
+            try {
+                const token = document.getElementById('gh-token').value;
+                const headers = token ? { 'Authorization': `token ${token}` } : {};
+
+                // Load Workflows
+                const wResp = await fetch(`https://api.github.com/repos/${REPO}/contents/workflows.json?t=${Date.now()}`, { headers });
+
+                if (!wResp.ok) {
+                    if (wResp.status === 403) throw new Error("API Rate Limit Exceeded (403). check Token.");
+                    if (wResp.status === 404) throw new Error("workflows.json not found.");
+                    throw new Error(`HTTP ${wResp.status}`);
+                }
+
+                const wData = await wResp.json();
+                if (!wData.content) throw new Error("Invalid response content");
+
+                window.sha = wData.sha;
+                allWorkflows = JSON.parse(decodeURIComponent(escape(atob(wData.content))));
+
+                // Load Logs
+                const lResp = await fetch('data.json?t=' + Date.now());
+                const lData = await lResp.json();
+                if (lData.length > 0) lastLogs = lData[0].logs;
+
+                renderSidebar();
+                if (allWorkflows.length > 0) selectTask(0);
+                else {
+                    // Reset UI if no tasks
+                    document.getElementById('task-name-input').value = "";
+                    editor.setValue("# Create a new task to start", -1);
+                }
+            } catch (e) {
+                console.error(e);
+                showToast("加载失败，请检查 Token 或网络", "error");
+            }
+        }
+
+        let historyData = [];
+
+
+
+        function toggleLogDetail(id) {
+            const el = document.getElementById('log-detail-' + id);
+            const icon = document.getElementById('log-icon-' + id);
+            if (el.style.display === 'none') {
+                el.style.display = 'block';
+                icon.innerText = '▼';
+            } else {
+                el.style.display = 'none';
+                icon.innerText = '▶';
+            }
+        }
+
+        function filterLogs() {
+            const search = document.getElementById('log-search').value.toLowerCase();
+            const status = document.getElementById('log-filter-status').value;
+
+            const filtered = historyData.filter(item => {
+                const matchText = (item.logs + item.status + item.id).toLowerCase().includes(search);
+                const matchStatus = status === 'all' ||
+                    (status === 'success' && item.status === 'success') ||
+                    (status === 'failure' && item.status !== 'success');
+                return matchText && matchStatus;
+            });
+
+            renderHistoryList(filtered);
+        }
+
+        function renderHistoryList(data) {
+            const container = document.getElementById('history-container');
+            if (data.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">暂无匹配日志</div>';
+                return;
+            }
+
+            const html = data.map((i, idx) => `
+                <div style="background:white; margin-bottom:10px; border-radius:6px; border:1px solid #ddd; overflow:hidden;">
+                    <div onclick="toggleLogDetail(${idx})" style="padding:12px 15px; background:#f6f8fa; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span id="log-icon-${idx}" style="font-size:12px; color:#57606a; width:15px;">▶</span>
+                            <span style="font-weight:600; font-size:14px; color: ${i.status === 'success' ? '#1a7f37' : '#cf222e'}">
+                                ${i.status.toUpperCase()}
+                            </span>
+                            <span style="font-family:monospace; background:#eee; padding:2px 6px; border-radius:4px; font-size:12px;">${i.id.substring(0, 7)}...</span>
+                        </div>
+                        <span style="font-size:12px; color:#57606a;">${i.timestamp}</span>
+                    </div>
+                    <pre id="log-detail-${idx}" style="display:none; margin:0; padding:15px; background:white; border-top:1px solid #eee; font-size:12px; overflow-x:auto; color:#24292f; white-space:pre-wrap;">${i.logs.replace(/</g, '&lt;')}</pre>
+                </div>
+            `).join('');
+            container.innerHTML = html;
+        }
+
+        function loadHistory() {
+            fetch('data.json?t=' + Date.now()).then(r => r.json()).then(data => {
+                historyData = data;
+                filterLogs();
+            });
+        }
+
+        function renderSidebar() {
+            const container = document.getElementById('task-list-container');
+            container.innerHTML = '';
+
+            allWorkflows.forEach((wf, idx) => {
+                const div = document.createElement('div');
+                div.className = `task-item ${idx === selectedIndex ? 'selected' : ''}`;
+                div.onclick = (e) => {
+                    // Prevent selection if clicking the toggle switch
+                    if (e.target.closest('.toggle-switch')) return;
+                    selectTask(idx);
+                };
+
+                div.innerHTML = `
+                    <span class="task-name">${wf.name}</span>
+                    <label class="toggle-switch" title="启用/禁用">
+                        <input type="checkbox" ${wf.enabled ? 'checked' : ''} onchange="toggleTask(${idx}, this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function selectTask(idx) {
+            // Save previous if switching? No, explicit save is safer for now.
+            selectedIndex = idx;
+            renderSidebar();
+
+            const wf = allWorkflows[idx];
+            document.getElementById('task-name-input').value = wf.name;
+
+            // Set script content to Ace Editor
+            // Handle legacy format (fallback) or new script format
+            let scriptContent = wf.script || "# No script content";
+            editor.setValue(scriptContent, -1); // -1 moves cursor to start
+
+            document.getElementById('check-schedule').checked = wf.run_on_schedule !== false;
+            document.getElementById('check-manual').checked = wf.run_on_dispatch !== false;
+
+            const timeInput = document.getElementById('schedule-time');
+            timeInput.value = wf.schedule_time || "";
+            timeInput.style.display = document.getElementById('check-schedule').checked ? 'block' : 'none';
+
+            document.getElementById('pip-deps').value = wf.pip || "";
+
+            // Filter logs
+            const logPanel = document.getElementById('task-output');
+            // Try to match specific log section
+            const logRegex = new RegExp(`--- Running Workflow: ${escapeRegExp(wf.name)} ---([\\s\\S]*?)--- Workflow Finished ---`);
+            const match = lastLogs.match(logRegex);
+
+            if (match) {
+                logPanel.innerText = match[1].trim();
+            } else {
+                logPanel.innerText = "未在最近一次运行日志中找到该任务的输出。";
+            }
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function toggleTask(idx, enabled) {
+            allWorkflows[idx].enabled = enabled;
+            // Update the UI logic only, user needs to click save to persist
+        }
+
+        function deleteTask() {
+            if (selectedIndex === -1) return;
+            if (!confirm(`确定要删除任务 "${allWorkflows[selectedIndex].name}" 吗？\n删除后需要点击“保存配置”才会被提交。`)) return;
+
+            allWorkflows.splice(selectedIndex, 1);
+            if (allWorkflows.length > 0) {
+                selectTask(Math.max(0, selectedIndex - 1));
+            } else {
+                selectedIndex = -1;
+                document.getElementById('task-list-container').innerHTML = '';
+                editor.setValue("# Create a new task to start", -1);
+                document.getElementById('task-name-input').value = "";
+            }
+            renderSidebar();
+            showToast("⚠️ 任务已移除，请点击保存配置以生效");
+        }
+
+        async function saveCurrentTask() {
+            if (selectedIndex === -1) return;
+
+            // Update local model
+            const wf = allWorkflows[selectedIndex];
+            wf.name = document.getElementById('task-name-input').value;
+            wf.script = editor.getValue();
+            wf.run_on_schedule = document.getElementById('check-schedule').checked;
+            wf.run_on_dispatch = document.getElementById('check-manual').checked;
+            wf.schedule_time = document.getElementById('schedule-time').value;
+            wf.pip = document.getElementById('pip-deps').value;
+
+            const token = document.getElementById('gh-token').value;
+            const btn = document.getElementById('btn-save-current');
+
+            try {
+                btn.disabled = true;
+                btn.innerText = "保存中...";
+
+                const resp = await fetch(`https://api.github.com/repos/${REPO}/contents/workflows.json`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: `Update task: ${wf.name}`,
+                        content: btoa(unescape(encodeURIComponent(JSON.stringify(allWorkflows, null, 4)))),
+                        sha: window.sha
+                    })
+                });
+
+                if (!resp.ok) throw new Error(resp.statusText);
+
+                const resData = await resp.json();
+                window.sha = resData.content.sha;
+                showToast("✅ 保存成功！等待部署...");
+                renderSidebar(); // Update names
+            } catch (e) {
+                showToast("❌ 保存失败: " + e.message, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "💾 保存配置";
+            }
+        }
+
+        async function triggerWorkflow(taskName = null) {
+            const token = document.getElementById('gh-token').value;
+            const inputs = taskName ? { task_name: taskName } : {};
+
+            try {
+                const resp = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/main.yml/dispatches`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ref: 'main', inputs: inputs })
+                });
+                if (resp.ok || resp.status === 204) showToast(taskName ? `🚀 正在运行任务: ${taskName}` : "🚀 已触发所有任务");
+                else throw new Error("Status " + resp.status);
+            } catch (e) { showToast("❌ 触发失败", "error"); }
+        }
+
+        function runCurrentTask() {
+            if (selectedIndex === -1) return;
+            const taskName = allWorkflows[selectedIndex].name;
+            triggerWorkflow(taskName);
+        }
+
+        function runAllTasks() {
+            triggerWorkflow(null);
+        }
+
+        function addNewTask() {
+            const newTask = {
+                name: "New Task " + (allWorkflows.length + 1),
+                enabled: true,
+                run_on_schedule: true,
+                run_on_dispatch: true,
+                script: "import requests\n\nprint('[LOG] New task started')\n# Write your code here"
+            };
+            allWorkflows.push(newTask);
+            selectTask(allWorkflows.length - 1);
+            document.getElementById('task-name-input').focus();
+        }
+
+
+        function deleteTask() {
+            if (selectedIndex === -1) return;
+            if (!confirm(`确定要删除任务 "${allWorkflows[selectedIndex].name}" 吗？\n删除后需要点击“保存配置”才会被提交。`)) return;
+
+            allWorkflows.splice(selectedIndex, 1);
+            if (allWorkflows.length > 0) {
+                selectTask(Math.max(0, selectedIndex - 1));
+            } else {
+                selectedIndex = -1;
+                document.getElementById('task-list-container').innerHTML = '';
+                editor.setValue("# Create a new task to start", -1);
+                document.getElementById('task-name-input').value = "";
+            }
+            renderSidebar();
+            showToast("⚠️ 任务已移除，请点击保存配置以生效");
+        }
+
+        // Redefined to allow saving even if no task is selected (e.g. after deletion)
+        async function saveCurrentTask() {
+            // Update local model only if a task is selected
+            if (selectedIndex !== -1) {
+                const wf = allWorkflows[selectedIndex];
+                wf.name = document.getElementById('task-name-input').value;
+                wf.script = editor.getValue();
+                wf.run_on_schedule = document.getElementById('check-schedule').checked;
+                wf.run_on_dispatch = document.getElementById('check-manual').checked;
+                wf.schedule_time = document.getElementById('schedule-time').value;
+            }
+
+            const token = document.getElementById('gh-token').value;
+            const btn = document.getElementById('btn-save-current');
+
+            try {
+                btn.disabled = true;
+                btn.innerText = "保存中...";
+
+                const resp = await fetch(`https://api.github.com/repos/${REPO}/contents/workflows.json`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: `Update workflows configuration`,
+                        content: btoa(unescape(encodeURIComponent(JSON.stringify(allWorkflows, null, 4)))),
+                        sha: window.sha
+                    })
+                });
+
+                if (!resp.ok) throw new Error(resp.statusText);
+
+                const resData = await resp.json();
+                window.sha = resData.content.sha;
+                showToast("✅ 保存成功！所有更改已提交");
+                renderSidebar();
+            } catch (e) {
+                showToast("❌ 保存失败: " + e.message, "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "💾 保存配置";
+            }
+        }
+
+        let isPolling = false;
+        let pollTimer = null;
+
+        function updateStatus(text, color = '#666') {
+            const el = document.getElementById('run-status-text');
+            if (el) {
+                el.innerText = text;
+                el.style.color = color;
+            }
+        }
+
+        function startPolling() {
+            if (isPolling) return;
+            isPolling = true;
+            updateStatus("运行中... (每5秒检查)", "#d29922");
+            pollTimer = setInterval(pollStatus, 5000);
+        }
+
+        async function pollStatus() {
+            try {
+                const token = document.getElementById('gh-token').value;
+                const headers = token ? { 'Authorization': `token ${token}` } : {};
+                const resp = await fetch(`https://api.github.com/repos/${REPO}/actions/runs?per_page=1`, { headers });
+                const data = await resp.json();
+
+                if (data.workflow_runs && data.workflow_runs.length > 0) {
+                    const latestRun = data.workflow_runs[0];
+                    if (latestRun.status === 'completed') {
+                        clearInterval(pollTimer);
+                        isPolling = false;
+
+                        const color = latestRun.conclusion === 'success' ? '#2da44e' : '#cf222e';
+                        updateStatus(`完成: ${latestRun.conclusion}`, color);
+                        showToast(`运行结束: ${latestRun.conclusion}`);
+
+                        setTimeout(() => {
+                            showToast("正在刷新日志...");
+                            loadData().then(() => {
+                                if (selectedIndex !== -1) selectTask(selectedIndex);
+                            });
+                        }, 3000);
+                    } else {
+                        updateStatus(`状态: ${latestRun.status}`, "#d29922");
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        // Redefined to include polling
+        async function triggerWorkflow(taskName = null) {
+            const token = document.getElementById('gh-token').value;
+            const inputs = taskName ? { task_name: taskName } : {};
+
+            try {
+                const resp = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/main.yml/dispatches`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ref: 'main', inputs: inputs })
+                });
+
+                if (resp.ok || resp.status === 204) {
+                    showToast(taskName ? `🚀 正在运行: ${taskName}` : "🚀 已触发所有任务");
+                    startPolling();
+                } else {
+                    throw new Error("Status " + resp.status);
+                }
+            } catch (e) { showToast("❌ 触发失败", "error"); }
+        }
+    </script>
+</body>
+
+</html>

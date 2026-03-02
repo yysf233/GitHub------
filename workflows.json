@@ -1,0 +1,31 @@
+[
+    {
+        "name": "Morning News Scraper",
+        "enabled": false,
+        "run_on_schedule": true,
+        "run_on_dispatch": true,
+        "script": "import requests\n\nprint('[LOG] Starting news scraper task...')\n\ntry:\n    resp = requests.get('https://hacker-news.firebaseio.com/v0/topstories.json')\n    top_ids = resp.json()\n    print(f'[LOG] Found {len(top_ids)} stories')\n    \n    # Get top 5\n    for story_id in top_ids[:5]:\n        r_item = requests.get(f'https://hacker-news.firebaseio.com/v0/item/{story_id}.json')\n        story = r_item.json()\n        print(f\"[LOG] title: {story.get('title')}\")\nexcept Exception as e:\n    print(f'[LOG] Error: {e}')"
+    },
+    {
+        "name": "Repo Star Tracker",
+        "enabled": false,
+        "run_on_schedule": true,
+        "run_on_dispatch": true,
+        "script": "import requests\n\nprint('[LOG] Checking stats for luoluoluo22/github-log-visualization...')\n\nurl = 'https://api.github.com/repos/luoluoluo22/github-log-visualization'\nresp = requests.get(url)\nif resp.status_code == 200:\n    data = resp.json()\n    print(f\"[LOG] Stars: {data['stargazers_count']}, Forks: {data['forks_count']}\")\nelse:\n    print(f'[LOG] Failed to fetch stats: {resp.status_code}')"
+    },
+    {
+        "name": "Quicker Recent Actions",
+        "enabled": false,
+        "run_on_schedule": true,
+        "run_on_dispatch": true,
+        "script": "import requests\nimport re\n\nprint('[LOG] Fetching recent Quicker actions...')\n\nurl = 'https://getquicker.net/Share/Recent'\nheaders = {'User-Agent': 'Mozilla/5.0'}\ntry:\n    resp = requests.get(url, headers=headers)\n    html = resp.text\n    \n    pattern = r'href=\"/Sharedaction\\?code=([^\\\"]+)\"[^>]*>\\s*([^<]+)\\s*</a>'\n    matches = re.findall(pattern, html)\n    \n    results = []\n    seen = set()\n    for code, name in matches:\n        name = name.strip()\n        if name and '\\n' not in name and code not in seen:\n            results.append({'name': name, 'url': f'https://getquicker.net/Sharedaction?code={code}'})\n            seen.add(code)\n            \n    print(f'[LOG] Successfully found {len(results)} new actions.')\n    for action in results[:8]:\n        print(f\"[LOG] [Quicker] {action['name']} -> {action['url']}\")\nexcept Exception as e:\n    print(f'[LOG] Error: {e}')"
+    },
+    {
+        "name": "测试",
+        "enabled": false,
+        "run_on_schedule": true,
+        "run_on_dispatch": true,
+        "script": "import requests\n\nprint('[LOG] New task started')\n# Write your code here",
+        "schedule_time": ""
+    }
+]

@@ -1,0 +1,54 @@
+name: GitHub Log Visualization Runner
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Runs every 5 minutes (GitHub minimum)
+  workflow_dispatch:
+    inputs:
+      task_name:
+        description: 'Task to run'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  run-and-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run Task
+        id: task
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TASK_NAME: ${{ github.event.inputs.task_name }}
+        run: |
+          python workflow_engine.py > log.txt 2>&1
+          echo "STATUS=success" >> $GITHUB_ENV
+
+      - name: Update Log History
+        run: |
+          python update_history.py
+        env:
+          RUN_STATUS: ${{ env.STATUS }}
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'LogBot'
+          git config --global user.email 'bot@noreply.github.com'
+          git add frontend/data.json
+          git commit -m "Update run logs $(date)" || echo "No changes to commit"
+          git push
